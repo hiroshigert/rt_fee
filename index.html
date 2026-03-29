@@ -219,7 +219,6 @@ function clearMessage() { document.getElementById('actionMessage').style.display
 
 // --- UI Initialization & Target Management ---
 function createTargetHTML(index) {
-    // indexを元に A, B, C の文字を生成
     const defaultChar = String.fromCharCode(65 + index);
     
     return `
@@ -297,7 +296,6 @@ function updateTargetVisibility() {
             document.getElementById(`t_active_${i}`).checked = true;
             document.getElementById(`t_label_${i}`).innerText = i + 1;
             
-            // 順序入れ替えボタンの表示制御
             document.getElementById(`btn_up_${i}`).style.display = (i > 0) ? "inline-block" : "none";
             document.getElementById(`btn_down_${i}`).style.display = (i < visibleTargets - 1) ? "inline-block" : "none";
             document.getElementById(`btn_del_${i}`).style.display = (i > 0) ? "inline-block" : "none";
@@ -351,7 +349,6 @@ function initUI() {
     container.innerHTML = [0, 1, 2].map(createTargetHTML).join('');
     const today = new Date().toISOString().split('T')[0];
     for(let i=0; i<3; i++) {
-        // Javascriptから明示的に初期値セット
         document.getElementById(`t_name_${i}`).value = `部位${String.fromCharCode(65 + i)}`;
         document.getElementById(`t_start_${i}`).value = today;
         calcTotalDose(i);
@@ -606,7 +603,9 @@ class Simulator {
     addLinac(date, s, t, n, p) { if(!this.linacResults[date][s][t]) this.linacResults[date][s][t]=[]; this.linacResults[date][s][t].push({name:n, pts:p}); }
 }
 
-// --- Output Rendering ---
+// ----------------------------------------------------
+// 今回修正箇所: 日ごと、部位ごとの小計に医療費（負担額）を追加
+// ----------------------------------------------------
 function generateSignature(dayObj, priorityFn) {
     if(!dayObj) return "null"; let sig = {};
     [1, 2].forEach(s => { 
@@ -655,9 +654,22 @@ function renderGroupedResults(containerId, resultsMap, dates, targetsInfo, prior
             for(let tIdx in g.data[session]) {
                 const items = [...g.data[session][tIdx]].sort((a, b) => priorityFn(a.name) - priorityFn(b.name));
                 let subTotal = items.reduce((sum, item) => sum + item.pts, 0); totalScore += subTotal * daysCount;
+                
+                // --- 日ごと・部位ごとの医療費計算 ---
+                let subCost3 = Math.round(subTotal * 3);
+                let subCost1 = Math.round(subTotal * 1);
+                
                 html += `<div class="result-site"><h5>${targetsInfo[tIdx].name}</h5>`;
                 items.forEach(item => html += `<div class="result-item"><span>${item.name}</span><span>${item.pts.toLocaleString()} 点</span></div>`);
-                html += `<div class="result-item" style="border:none; margin-top:3px; font-weight:bold; color:var(--primary);"><span>小計</span><span>${subTotal.toLocaleString()} 点</span></div></div>`;
+                
+                // --- 小計の出力に負担額を追加 ---
+                html += `<div class="result-item" style="border:none; margin-top:5px; font-weight:bold; color:var(--primary); align-items:flex-end;">
+                    <span>小計</span>
+                    <div style="text-align:right; line-height:1.2;">
+                        <div>${subTotal.toLocaleString()} 点</div>
+                        <div style="font-size:0.75rem; color:#555; font-weight:normal;">(3割: ${subCost3.toLocaleString()}円 / 1割: ${subCost1.toLocaleString()}円)</div>
+                    </div>
+                </div></div>`;
             }
             html += `</div>`;
         });
@@ -666,29 +678,43 @@ function renderGroupedResults(containerId, resultsMap, dates, targetsInfo, prior
     container.innerHTML += `<div class="total-score">計: ${totalScore.toLocaleString()} 点</div>`;
     return totalScore;
 }
+// ----------------------------------------------------
 
 function renderSummary(dates, rawTargetsData, exTotal, linTotal) {
     const activeTargets = rawTargetsData.filter(t => t.active && t.start && t.frac > 0);
     if(dates.length === 0) return;
     
-    // 全日数の計算 (最終日 - 初回日 + 1：両端を含む日数を計算)
     const overallStart = new Date(dates[0]);
     const overallEnd = new Date(dates[dates.length - 1]);
     const overallDays = Math.round((overallEnd - overallStart) / 86400000) + 1;
 
-    let summaryHtml = `<div style="display:flex; gap:20px; flex-wrap:wrap;">`;
-    summaryHtml += `<div><strong>全体治療期間:</strong> ${dates[0] || "---"} ～ ${dates[dates.length-1] || "---"} (全 ${overallDays} 日)<br>`;
-    summaryHtml += `<strong>総計(体外照射):</strong> <span style="color:var(--primary); font-weight:bold;">${exTotal.toLocaleString()} 点</span> / <strong>総計(直線加速器による放射線治療):</strong> <span style="color:var(--primary); font-weight:bold;">${linTotal.toLocaleString()} 点</span></div>`;
+    const exCost3 = Math.round(exTotal * 3);
+    const exCost1 = Math.round(exTotal * 1);
+    const linCost3 = Math.round(linTotal * 3);
+    const linCost1 = Math.round(linTotal * 1);
+
+    let summaryHtml = `<div style="display:flex; flex-direction:column; gap:10px;">`;
     
-    // 各部位の日数計算 (最終日 - 初回日 + 1)
+    summaryHtml += `<div><strong>全体治療期間:</strong> ${dates[0] || "---"} ～ ${dates[dates.length-1] || "---"} (全 ${overallDays} 日)<br>`;
+    
     let targetsHtml = activeTargets.map(t => {
         const tStart = new Date(t.start);
         const tEnd = new Date(t.endDate);
         const tDays = Math.round((tEnd - tStart) / 86400000) + 1;
         return `<strong>[${t.name}]</strong> ${t.start} ～ ${t.endDate} (全 ${tDays} 日)`;
-    }).join('<br>');
+    }).join(' / ');
+    summaryHtml += `<div style="font-size:0.85rem; color:#555; margin-top:3px;">${targetsHtml}</div></div>`;
+
+    summaryHtml += `<div style="background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">`;
     
-    summaryHtml += `<div>${targetsHtml}</div></div>`;
+    summaryHtml += `<div style="margin-bottom: 8px;"><strong>総計(体外照射):</strong> <span style="color:var(--primary); font-weight:bold; font-size:1.1rem;">${exTotal.toLocaleString()} 点</span><br>`;
+    summaryHtml += `<span style="font-size:0.9rem; color:#444; margin-left:10px;">[目安負担額: <strong>3割 ${exCost3.toLocaleString()}円</strong> / <strong>1割 ${exCost1.toLocaleString()}円</strong>]</span></div>`;
+    
+    summaryHtml += `<div><strong>総計(直線加速器による放射線治療):</strong> <span style="color:var(--primary); font-weight:bold; font-size:1.1rem;">${linTotal.toLocaleString()} 点</span><br>`;
+    summaryHtml += `<span style="font-size:0.9rem; color:#444; margin-left:10px;">[目安負担額: <strong>3割 ${linCost3.toLocaleString()}円</strong> / <strong>1割 ${linCost1.toLocaleString()}円</strong>]</span></div>`;
+    
+    summaryHtml += `</div></div>`;
+    
     document.getElementById('summaryContent').innerHTML = summaryHtml;
 }
 
