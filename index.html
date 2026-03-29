@@ -13,7 +13,6 @@
     select#yearVersion { padding: 3px; font-size: 0.85rem; }
     .container { max-width: 1400px; margin: 10px auto; padding: 0 10px; }
     
-    /* パネルとヘッダーのスタイル */
     .panel { background: white; border-radius: 6px; padding: 10px 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
     .panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--secondary); padding-bottom: 5px; margin-bottom: 10px; }
     .panel-header h2 { margin: 0; font-size: 1rem; color: var(--primary); border: none; padding: 0; }
@@ -30,7 +29,8 @@
     .target-card { border: 1px solid var(--border); border-radius: 4px; padding: 8px; background: #fdfdfd; transition: opacity 0.3s; }
     .target-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; background: #eef5ff; padding: 5px; border-radius: 3px; }
     .target-header h3 { margin: 0; font-size: 0.95rem; color: var(--primary); }
-    .target-actions button { background: white; border: 1px solid #ccc; padding: 2px 6px; font-size: 0.75rem; cursor: pointer; border-radius: 3px; }
+    .target-actions button { background: white; border: 1px solid #dc3545; color: #dc3545; padding: 2px 8px; font-size: 0.75rem; cursor: pointer; border-radius: 3px; font-weight: bold; }
+    .target-actions button:hover { background: #dc3545; color: white; }
     
     .btn { background: var(--primary); color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 0.85rem; font-weight: bold; transition: opacity 0.2s; }
     .btn:hover { opacity: 0.8; }
@@ -40,7 +40,6 @@
     .btn-warning { background: #ffc107; color: black; }
     .btn-large { padding: 10px 20px; font-size: 1rem; }
     
-    /* リストにスクロールバーを追加して高さ崩れを防止 */
     .holiday-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; max-height: 100px; overflow-y: auto; align-content: flex-start; padding-right: 5px; }
     .holiday-tag { background: #ffeeba; border: 1px solid #ffdf7e; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; }
     .holiday-tag span { cursor: pointer; color: red; font-weight: bold; }
@@ -59,7 +58,6 @@
     .total-score { text-align: right; font-size: 1.2rem; color: var(--primary); font-weight: bold; margin-top: 10px; border-top: 2px solid var(--primary); padding-top: 5px; }
     #summaryContent { font-size: 0.9rem; line-height: 1.4; background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #ddd; }
     
-    /* インラインメッセージ用スタイル */
     #actionMessage { display: none; padding: 10px; margin-bottom: 15px; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.95rem; }
     .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .msg-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
@@ -144,7 +142,12 @@
     </div>
 
     <div class="panel">
-        <div class="panel-header"><h2>部位別 治療情報</h2></div>
+        <div class="panel-header">
+            <h2>部位別 治療情報</h2>
+            <div class="actions no-print">
+                <button class="btn btn-outline btn-small" id="addTargetBtn" onclick="addTarget()">＋ 部位追加</button>
+            </div>
+        </div>
         <div id="targetContainer" class="target-container"></div>
     </div>
 
@@ -179,8 +182,9 @@ const DEFAULT_JP_HOLIDAYS = [
     "2025-01-01","2025-01-13","2025-02-11","2025-02-23","2025-02-24","2025-03-20","2025-04-29","2025-05-03","2025-05-04","2025-05-05","2025-05-06","2025-07-21","2025-08-11","2025-09-15","2025-09-23","2025-10-13","2025-11-03","2025-11-23","2025-11-24",
     "2026-01-01","2026-01-12","2026-02-11","2026-02-23","2026-03-20","2026-04-29","2026-05-03","2026-05-04","2026-05-05","2026-05-06","2026-07-20","2026-08-11","2026-09-21","2026-09-22","2026-09-23","2026-10-12","2026-11-03","2026-11-23"
 ];
-let hospitalHolidays = [...DEFAULT_JP_HOLIDAYS]; // 休診日（ベースは日本の祝日）
-let customHolidays = []; // 休日照射設定（休診日だが治療する日）
+let hospitalHolidays = [...DEFAULT_JP_HOLIDAYS]; 
+let customHolidays = []; 
+let visibleTargets = 1;
 
 // --- Sort Priorities ---
 function getExPriority(name) {
@@ -210,21 +214,19 @@ function showMessage(text, type = 'success') {
 }
 function clearMessage() { document.getElementById('actionMessage').style.display = 'none'; }
 
-// --- UI Initialization ---
+// --- UI Initialization & Target Management ---
 function createTargetHTML(index) {
-    const isChecked = index === 0 ? "checked" : "";
     return `
-    <div class="target-card" id="targetCard_${index}">
+    <div class="target-card" id="targetCard_${index}" style="display: none;">
         <div class="target-header">
             <h3>
                 <label class="checkbox-label" style="color: inherit; font-weight: bold; margin:0;">
-                    <input type="checkbox" id="t_active_${index}" ${isChecked} onchange="toggleTarget(${index})">
-                    部位 ${index + 1}
+                    <input type="checkbox" id="t_active_${index}" checked onchange="toggleTarget(${index})">
+                    部位 <span id="t_label_${index}">${index + 1}</span>
                 </label>
             </h3>
             <div class="target-actions">
-                ${index > 0 ? `<button type="button" onclick="swapTarget(${index}, ${index-1})">◀</button>` : ''}
-                ${index < 2 ? `<button type="button" onclick="swapTarget(${index}, ${index+1})">▶</button>` : ''}
+                ${index > 0 ? `<button type="button" onclick="removeTarget(${index})">削除</button>` : ''}
             </div>
         </div>
         <div id="t_content_${index}">
@@ -279,10 +281,48 @@ function createTargetHTML(index) {
     </div>`;
 }
 
+function updateTargetVisibility() {
+    for (let i = 0; i < 3; i++) {
+        const card = document.getElementById(`targetCard_${i}`);
+        if (i < visibleTargets) {
+            card.style.display = "block";
+            document.getElementById(`t_active_${i}`).checked = true;
+            document.getElementById(`t_label_${i}`).innerText = i + 1;
+        } else {
+            card.style.display = "none";
+            document.getElementById(`t_active_${i}`).checked = false;
+        }
+        toggleTarget(i);
+    }
+    document.getElementById('addTargetBtn').style.display = visibleTargets >= 3 ? 'none' : 'inline-block';
+}
+
+function addTarget() {
+    if (visibleTargets < 3) {
+        // 直前の部位の開始日を引き継ぐと便利なので設定
+        if(visibleTargets > 0) {
+            const prevStart = document.getElementById(`t_start_${visibleTargets-1}`).value;
+            document.getElementById(`t_start_${visibleTargets}`).value = prevStart;
+        }
+        visibleTargets++;
+        updateTargetVisibility();
+    }
+}
+
+function removeTarget(index) {
+    if (visibleTargets > 1) {
+        // 削除されたインデックスより後ろのデータを前に詰める
+        for (let i = index; i < visibleTargets - 1; i++) {
+            setTargetData(i, getTargetData(i + 1));
+        }
+        visibleTargets--;
+        updateTargetVisibility();
+    }
+}
+
 function calcTotalDose(index) {
     const dose = parseFloat(document.getElementById(`t_dose_${index}`).value) || 0;
     const frac = parseInt(document.getElementById(`t_frac_${index}`).value) || 0;
-    // 小数点2桁までに変更
     document.getElementById(`t_total_dose_${index}`).innerText = (dose * frac).toFixed(2);
 }
 
@@ -292,9 +332,10 @@ function initUI() {
     const today = new Date().toISOString().split('T')[0];
     for(let i=0; i<3; i++) {
         document.getElementById(`t_start_${i}`).value = today;
-        toggleTarget(i);
         calcTotalDose(i);
     }
+    visibleTargets = 1;
+    updateTargetVisibility();
     renderHospitalHolidays();
 }
 
@@ -306,7 +347,7 @@ function toggleTarget(index) {
 
 function getTargetData(i) {
     return {
-        id: i, active: document.getElementById(`t_active_${i}`).checked,
+        id: i, active: document.getElementById(`t_active_${i}`).checked && i < visibleTargets,
         name: document.getElementById(`t_name_${i}`).value || `部位${i+1}`,
         start: document.getElementById(`t_start_${i}`).value, category: document.getElementById(`t_category_${i}`).value,
         method: document.getElementById(`t_method_${i}`).value, stereo: document.getElementById(`t_stereo_${i}`).checked,
@@ -317,24 +358,18 @@ function getTargetData(i) {
 }
 
 function setTargetData(i, data) {
-    document.getElementById(`t_active_${i}`).checked = data.active;
     document.getElementById(`t_name_${i}`).value = data.name; document.getElementById(`t_start_${i}`).value = data.start;
     document.getElementById(`t_category_${i}`).value = data.category; document.getElementById(`t_method_${i}`).value = data.method;
     document.getElementById(`t_stereo_${i}`).checked = data.stereo; document.getElementById(`t_frac_${i}`).value = data.frac;
     document.getElementById(`t_dose_${i}`).value = data.dose; document.getElementById(`t_freq_${i}`).value = data.freq;
     document.querySelector(`input[name="t_shell_${i}"][value="${data.shell}"]`).checked = true;
     document.getElementById(`t_igrt_${i}`).value = data.igrt;
-    toggleTarget(i); calcTotalDose(i);
-}
-
-function swapTarget(idx1, idx2) {
-    const d1 = getTargetData(idx1); const d2 = getTargetData(idx2);
-    setTargetData(idx1, d2); setTargetData(idx2, d1);
+    calcTotalDose(i);
 }
 
 function validateInputs() {
     let hasActive = false;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < visibleTargets; i++) {
         if (document.getElementById(`t_active_${i}`).checked) {
             hasActive = true;
             if (!document.getElementById(`t_name_${i}`).value || !document.getElementById(`t_start_${i}`).value ||
@@ -343,26 +378,24 @@ function validateInputs() {
             }
         }
     }
-    if(!hasActive) { showMessage("有効な部位が選択されていません。", 'error'); return false; }
+    if(!hasActive) { showMessage("有効な部位が設定されていません。", 'error'); return false; }
     clearMessage(); return true;
 }
 
 // --- Holiday Management ---
 function isTreatmentDay(dateStr) {
-    if (customHolidays.includes(dateStr)) return true; // 休日照射（最優先）
+    if (customHolidays.includes(dateStr)) return true;
     const d = new Date(dateStr); const day = d.getDay();
-    if (day === 0 || day === 6 || hospitalHolidays.includes(dateStr)) return false; // 休診日
+    if (day === 0 || day === 6 || hospitalHolidays.includes(dateStr)) return false;
     return true;
 }
 
-// 休診日(祝日)用
 function addHospitalHoliday() {
     const date = document.getElementById('sysHolidayInput').value;
     if(date && !hospitalHolidays.includes(date)) { hospitalHolidays.push(date); hospitalHolidays.sort(); renderHospitalHolidays(); }
 }
 function removeHospitalHoliday(date) { hospitalHolidays = hospitalHolidays.filter(d => d !== date); renderHospitalHolidays(); }
 function renderHospitalHolidays() {
-    // 数が多いので、表示上わかりやすいようにデフォルト祝日と独自追加を色分け
     document.getElementById('hospitalHolidayList').innerHTML = hospitalHolidays.map(d => {
         const isDefault = DEFAULT_JP_HOLIDAYS.includes(d);
         const cssClass = isDefault ? "holiday-tag system-holiday" : "holiday-tag";
@@ -370,7 +403,6 @@ function renderHospitalHolidays() {
     }).join('');
 }
 
-// 休日照射設定用
 function addHoliday() {
     const date = document.getElementById('holidayInput').value;
     if(date && !customHolidays.includes(date)) { customHolidays.push(date); customHolidays.sort(); renderHolidays(); }
@@ -387,9 +419,10 @@ function downloadJson(obj, filename) {
     a.download = filename; a.click();
 }
 
-// 患者データ
 function saveData() {
-    const data = { patient: getPatientInfo(), targets: [0,1,2].map(getTargetData) };
+    let targetsToSave = [];
+    for(let i=0; i<visibleTargets; i++) targetsToSave.push(getTargetData(i));
+    const data = { patient: getPatientInfo(), targets: targetsToSave };
     downloadJson(data, `${data.patient.id || 'IDなし'}_${data.patient.name || '氏名なし'}_入力項目.json`);
     showMessage("患者データを保存しました。", "success");
 }
@@ -401,13 +434,17 @@ function loadData(event) {
             const data = JSON.parse(e.target.result);
             document.getElementById('patientId').value = data.patient.id; document.getElementById('patientName').value = data.patient.name;
             document.querySelector(`input[name="patientType"][value="${data.patient.type}"]`).checked = true;
-            data.targets.forEach((t, i) => setTargetData(i, t));
+            
+            // 表示する部位の数をロードデータに合わせる
+            visibleTargets = data.targets.length > 0 ? (data.targets.length > 3 ? 3 : data.targets.length) : 1;
+            updateTargetVisibility();
+            
+            data.targets.slice(0, 3).forEach((t, i) => setTargetData(i, t));
             showMessage("患者データを読み込みました。", "success");
         } catch (err) { showMessage("ファイルの読込に失敗しました。", "error"); }
     }; reader.readAsText(file); event.target.value = "";
 }
 
-// 休診日(祝日)設定データ
 function saveHospitalHolidays() { downloadJson(hospitalHolidays, `休診日設定.json`); showMessage("休診日(祝日)設定を保存しました。", "success"); }
 function loadHospitalHolidays(event) {
     const file = event.target.files[0]; if(!file) return;
@@ -418,7 +455,6 @@ function loadHospitalHolidays(event) {
     }; reader.readAsText(file); event.target.value = "";
 }
 
-// 休日照射設定データ
 function saveHolidays() { downloadJson(customHolidays, `休日照射設定.json`); showMessage("休日照射設定を保存しました。", "success"); }
 function loadHolidays(event) {
     const file = event.target.files[0]; if(!file) return;
@@ -435,6 +471,7 @@ class Simulator {
         this.targets = targetsData.filter(t => t.active && t.start && t.frac > 0);
         this.patientType = patientType;
         this.timeline = {}; this.extracorporealResults = {}; this.linacResults = {};
+        this.shellBilledOverall = false; // 患者全体での固定具算定フラグ
     }
     addNextTreatmentDay(currentDateStr) {
         let d = new Date(currentDateStr); d.setDate(d.getDate() + 1);
@@ -525,7 +562,12 @@ class Simulator {
                         this.addEx(date, session, idx, `【実施料(2部位目)】${implName}`, implPts);
                     } else { this.addEx(date, session, idx, `【実施料(3部位目以降)】`, 0); }
 
-                    if(targetFirstTreatment[idx] && t.shell === "あり") this.addEx(date, session, idx, "【体外照射用固定具加算】", 1000);
+                    // 固定具加算の1回制限処理
+                    if(targetFirstTreatment[idx] && t.shell === "あり" && !this.shellBilledOverall) { 
+                        this.addEx(date, session, idx, "【体外照射用固定具加算】", 1000); 
+                        this.shellBilledOverall = true; 
+                    }
+
                     if(rank <= 1) {
                         if(t.category==="全乳房"&&t.dose>=2.5) this.addEx(date, session, idx, "【1回線量増加加算(全乳房)】", 690);
                         else if(t.category==="前立腺"&&m==="強度変調放射線治療(IMRT)"&&t.dose>=3.0) this.addEx(date, session, idx, "【1回線量増加加算(前立腺)】", 1400);
@@ -574,10 +616,11 @@ function renderGroupedResults(containerId, resultsMap, dates, targetsInfo, prior
     groups.forEach(g => {
         let startDateStr = dates[g.startDayNo - 1];
         let endDateStr = dates[g.endDayNo - 1];
-        let title = g.startDayNo === 1 ? "【初日算定】" : `【2日目以降算定】`;
+        
+        // n日目以降算定の表記へ変更
+        let title = g.startDayNo === 1 ? "【初日算定】" : `【${g.startDayNo}日目以降算定】`;
         title += startDateStr !== endDateStr ? ` (${startDateStr} ～ ${endDateStr})` : ` (${startDateStr})`;
 
-        // 休日照射の検出と表示
         let groupDates = dates.slice(g.startDayNo - 1, g.endDayNo);
         let holidayTreatments = groupDates.filter(d => customHolidays.includes(d)); 
         if (holidayTreatments.length > 0) {
@@ -606,11 +649,27 @@ function renderGroupedResults(containerId, resultsMap, dates, targetsInfo, prior
 }
 
 function renderSummary(dates, rawTargetsData, exTotal, linTotal) {
-    const activeTargets = rawTargetsData.filter(t => t.active);
+    const activeTargets = rawTargetsData.filter(t => t.active && t.start && t.frac > 0);
+    if(dates.length === 0) return;
+    
+    // 全日数の計算 (終了日 - 開始日 + 1)
+    const overallStart = new Date(dates[0]);
+    const overallEnd = new Date(dates[dates.length - 1]);
+    const overallDays = Math.round((overallEnd - overallStart) / 86400000) + 1;
+
     let summaryHtml = `<div style="display:flex; gap:20px; flex-wrap:wrap;">`;
-    summaryHtml += `<div><strong>全体治療期間:</strong> ${dates[0] || "---"} ～ ${dates[dates.length-1] || "---"} (計 ${dates.length} 日)<br>`;
+    summaryHtml += `<div><strong>全体治療期間:</strong> ${dates[0] || "---"} ～ ${dates[dates.length-1] || "---"} (全 ${overallDays} 日)<br>`;
     summaryHtml += `<strong>総計(体外照射):</strong> <span style="color:var(--primary); font-weight:bold;">${exTotal.toLocaleString()} 点</span> / <strong>総計(直線加速器):</strong> <span style="color:var(--primary); font-weight:bold;">${linTotal.toLocaleString()} 点</span></div>`;
-    summaryHtml += `<div>` + activeTargets.map(t => `<strong>[${t.name}]</strong> ${t.start} ～ ${t.endDate} (${t.frac}回) / 総線量 ${(t.dose * t.frac).toFixed(2)}Gy`).join('<br>') + `</div></div>`;
+    
+    // 各部位の日数計算
+    let targetsHtml = activeTargets.map(t => {
+        const tStart = new Date(t.start);
+        const tEnd = new Date(t.endDate);
+        const tDays = Math.round((tEnd - tStart) / 86400000) + 1;
+        return `<strong>[${t.name}]</strong> ${t.start} ～ ${t.endDate} (全 ${tDays} 日) / 総線量 ${(t.dose * t.frac).toFixed(2)}Gy`;
+    }).join('<br>');
+    
+    summaryHtml += `<div>${targetsHtml}</div></div>`;
     document.getElementById('summaryContent').innerHTML = summaryHtml;
 }
 
@@ -618,7 +677,9 @@ function calculateSimulation(targetsData) { return new Simulator(targetsData, do
 
 function calculateAndRender() {
     if(!validateInputs()) return;
-    const rawTargets = [0,1,2].map(getTargetData);
+    let rawTargets = [];
+    for(let i=0; i<visibleTargets; i++) rawTargets.push(getTargetData(i));
+    
     const res = calculateSimulation(rawTargets);
     document.getElementById('resultArea').style.display = "block";
     let exTotal = renderGroupedResults('resultExtracorporeal', res.ex, res.dates, res.targetsInfo, getExPriority);
@@ -638,7 +699,9 @@ function permute(arr) {
 
 function optimizeOrder() {
     if(!validateInputs()) return;
-    const rawTargets = [0,1,2].map(getTargetData);
+    let rawTargets = [];
+    for(let i=0; i<visibleTargets; i++) rawTargets.push(getTargetData(i));
+    
     let activeIndices = rawTargets.map((t, i) => t.active ? i : -1).filter(i => i !== -1);
     
     if(activeIndices.length <= 1) { 
