@@ -72,7 +72,6 @@
         .container { margin: 0; padding: 0; max-width: 100%; }
         .panel { box-shadow: none; border: none; padding: 0; margin-bottom: 5px; }
         
-        /* 印刷時は部位入力を3列固定にするための調整 */
         .target-container { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 5px; }
         .target-card { padding: 4px; border: 1px solid #ccc; }
         .target-header { padding: 3px; margin-bottom: 4px; }
@@ -193,7 +192,6 @@
 
 <script>
 // --- Const & Data ---
-// 2026年の祝日データのみに更新
 const DEFAULT_JP_HOLIDAYS = [
     "2026-01-01","2026-01-12","2026-02-11","2026-02-23","2026-03-20","2026-04-29","2026-05-03","2026-05-04","2026-05-05","2026-05-06","2026-07-20","2026-08-11","2026-09-21","2026-09-22","2026-09-23","2026-10-12","2026-11-03","2026-11-23"
 ];
@@ -568,12 +566,10 @@ class Simulator {
                 sessionTargets.forEach(idx => {
                     const t = this.targets[idx], rank = rankMap[idx], m = t.method;
 
-                    // 直線加速器による放射線治療は、一連の治療で1回のみ算定可
                     if(overallFirstTreatment && rank === 0) {
                         this.addLinac(date, session, idx, "【医療機器安全管理料２】", 1100);
                         this.addLinac(date, session, idx, t.stereo ? "【放射線治療実施料（定位）】" : "【放射線治療実施料（定位以外）】", t.stereo ? 63000 : 8000);
                     } else {
-                        // 2回目以降・2部位目以降は算定不可の旨を追加
                         this.addLinac(date, session, idx, "※算定なし (2回目以降・2部位目以降は算定不可)", 0);
                     }
 
@@ -662,17 +658,12 @@ function renderGroupedResults(containerId, resultsMap, dates, targetsInfo, prior
         let daysCount = g.endDayNo - g.startDayNo + 1;
         let html = `<div class="result-group"><div class="result-day">${title}</div>`;
 
-        // 1日あたりの合計計算用
         let dailyTotalForGroup = 0;
-        let uniqueTargetIds = new Set();
-
-        // (1回目)表示を制御するための判定（2回目が存在するかどうか）
         let hasMultipleSessions = Object.keys(g.data[2] || {}).length > 0;
 
         [1, 2].forEach(session => {
             if(!g.data[session] || Object.keys(g.data[session]).length === 0) return;
             
-            // 2回目がある場合のみ「(1回目)」を表示、または「(2回目)」の場合は必ず表示
             if (hasMultipleSessions || session === 2) {
                 html += `<div class="result-session"><h4>(${session}回目)</h4>`;
             } else {
@@ -680,7 +671,6 @@ function renderGroupedResults(containerId, resultsMap, dates, targetsInfo, prior
             }
 
             for(let tIdx in g.data[session]) {
-                uniqueTargetIds.add(tIdx);
                 const items = [...g.data[session][tIdx]].sort((a, b) => priorityFn(a.name) - priorityFn(b.name));
                 let subTotal = items.reduce((sum, item) => sum + item.pts, 0); 
                 totalScore += subTotal * daysCount;
@@ -703,21 +693,19 @@ function renderGroupedResults(containerId, resultsMap, dates, targetsInfo, prior
             html += `</div>`;
         });
         
-        // 複数部位が存在する場合は、1日あたりの全部位合計を表示
-        if (uniqueTargetIds.size > 1) {
+        // 複数部位シミュレーションを行っている場合は、最後の日程で残り1部位になっていても「1日あたりの合計」を常に表示する
+        if (targetsInfo.length > 1) {
             let dCost3 = Math.round(dailyTotalForGroup * 3);
             let dCost1 = Math.round(dailyTotalForGroup * 1);
-            html += `<div style="margin-top:10px; margin-left:10px; padding:6px; background:#e6f2ff; border-radius:4px; text-align:right; font-weight:bold; color:var(--primary); font-size:1rem; border:1px solid #b8daff;">
-                <span>1日あたり 全部場合計</span>
-                <div style="margin-top:2px;">${dailyTotalForGroup.toLocaleString()} 点</div>
-                <div style="font-size:0.8rem; color:#555; font-weight:normal;">(3割: ${dCost3.toLocaleString()}円 / 1割: ${dCost1.toLocaleString()}円)</div>
+            html += `<div style="margin-top:10px; padding:6px; background:#e6f2ff; border-radius:4px; text-align:right; font-weight:bold; color:var(--primary); font-size:0.95rem; border:1px solid #b8daff; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:baseline; gap:5px;">
+                <span>1日あたり 計: ${dailyTotalForGroup.toLocaleString()} 点</span>
+                <span style="font-size:0.8rem; color:#555; font-weight:normal;">(3割: ${dCost3.toLocaleString()}円 / 1割: ${dCost1.toLocaleString()}円)</span>
             </div>`;
         }
 
         container.innerHTML += html + `</div>`;
     });
 
-    // 全合計に負担額を追加
     let grandTotalCost3 = Math.round(totalScore * 3);
     let grandTotalCost1 = Math.round(totalScore * 1);
     container.innerHTML += `<div class="total-score">
@@ -747,7 +735,6 @@ function renderSummary(dates, rawTargetsData, exTotal, linTotal) {
     
     summaryHtml += `<div><strong>全体治療期間:</strong> ${dates[0] || "---"} ～ ${dates[dates.length-1] || "---"} (全 ${overallDays} 日)<br>`;
     
-    // ターゲットごとの期間を表形式（テーブル）にして文字が揃うように変更
     let targetsHtml = `<table style="border-collapse: collapse; margin-top: 5px; font-size: 0.85rem; color:#555;">`;
     activeTargets.forEach(t => {
         const tStart = new Date(t.start);
